@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Lightbulb, Zap, Code, Rocket, Sparkles, Bot } from 'lucide-react';
+import { Send, Loader2, Lightbulb, Zap, Code, Rocket, Sparkles, Bot, AlertCircle } from 'lucide-react';
 import PageHeader from '../components/layout/PageHeader';
 import ContentContainer from '../components/layout/ContentContainer';
 import { Button } from '../components/ui/button';
@@ -41,28 +41,100 @@ const IdeaForgeAI: React.FC = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = input;
     setInput('');
     setLoading(true);
 
     try {
-      // For now, we'll simulate an AI response
-      // When you provide the OpenAI API key, we'll implement the actual API call
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API delay
+      // Check if API key is configured
+      const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+      
+      if (!apiKey || apiKey === 'your_openai_api_key_here') {
+        throw new Error('OpenAI API key not configured');
+      }
+
+      const fullPrompt = `You are IdeaForge++, an AI assistant designed to help students, developers, and innovators brainstorm project ideas, solve technical doubts, and provide creative suggestions.
+
+Your personality and style:
+- Friendly, motivating, and developer-focused
+- Clear, concise, and practical responses
+- Real-world-relevant project suggestions
+- Simple technical explanations for complex concepts
+- Encouraging and inspiring tone
+- Use emojis sparingly but effectively
+- Focus on actionable advice
+
+Context: You're part of IgniteHub, a platform that curates resources for young innovators aged 16-30. Users come to you for:
+- Project idea generation
+- Technical problem solving
+- Hackathon project suggestions
+- Learning path recommendations
+- Innovation strategies
+- Code debugging help
+- Technology recommendations
+
+User Request: ${currentInput}
+
+Provide a helpful, encouraging response that matches your personality:`;
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: "You are IdeaForge++, an AI assistant helping young innovators with project ideas, technical problems, and creative solutions. Be encouraging, practical, and developer-focused."
+            },
+            {
+              role: "user",
+              content: fullPrompt
+            }
+          ],
+          max_tokens: 800,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const aiContent = data.choices?.[0]?.message?.content || "I'm having trouble processing that request. Could you try rephrasing it?";
 
       const aiResponse: Message = {
         role: 'assistant',
-        content: "🤖 I'd love to help you with that! However, I need an OpenAI API key to provide intelligent responses. Once configured, I can help you with:\n\n• 💡 Project idea generation\n• 🔧 Technical problem solving\n• 🚀 Hackathon project suggestions\n• 📚 Learning path recommendations\n• 🎯 Feature implementation ideas\n\nPlease ask the developer to configure the OpenAI API key to unlock my full potential!",
+        content: aiContent,
         timestamp: new Date()
       };
 
       setMessages(prev => [...prev, aiResponse]);
-    } catch (error) {
-      const errorMessage: Message = {
+    } catch (error: any) {
+      console.error('Error calling OpenAI API:', error);
+      
+      let errorMessage = "⚠️ I'm having trouble connecting right now. Please try again in a moment.";
+      
+      if (error.message.includes('API key not configured')) {
+        errorMessage = "🔑 OpenAI API key needs to be configured. Please check your environment variables and make sure VITE_OPENAI_API_KEY is set correctly.";
+      } else if (error.message.includes('401')) {
+        errorMessage = "🔐 Invalid API key. Please check your OpenAI API key configuration.";
+      } else if (error.message.includes('429')) {
+        errorMessage = "⏱️ Rate limit exceeded. Please wait a moment before trying again.";
+      } else if (error.message.includes('quota')) {
+        errorMessage = "💳 API quota exceeded. Please check your OpenAI account billing.";
+      }
+
+      const errorResponse: Message = {
         role: 'assistant',
-        content: "⚠️ Oops! Something went wrong. Please try again in a moment.",
+        content: errorMessage,
         timestamp: new Date()
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => [...prev, errorResponse]);
     } finally {
       setLoading(false);
     }
@@ -82,6 +154,11 @@ const IdeaForgeAI: React.FC = () => {
     { icon: <Zap size={16} />, text: "AI project ideas", prompt: "Give me some AI/ML project ideas suitable for students" }
   ];
 
+  const isApiKeyConfigured = () => {
+    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+    return apiKey && apiKey !== 'your_openai_api_key_here';
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900">
       <PageHeader
@@ -98,6 +175,23 @@ const IdeaForgeAI: React.FC = () => {
       </PageHeader>
 
       <ContentContainer className="max-w-4xl">
+        {/* API Key Status Warning */}
+        {!isApiKeyConfigured() && (
+          <div className="mb-6 p-4 bg-gradient-to-r from-red-900/20 to-orange-900/20 border border-red-500/30 rounded-xl">
+            <div className="flex items-start space-x-3">
+              <AlertCircle className="text-red-400 mt-1 flex-shrink-0" size={20} />
+              <div>
+                <h3 className="text-red-300 font-semibold mb-2">API Key Required</h3>
+                <p className="text-red-100/80 text-sm">
+                  To enable AI responses, please add your OpenAI API key to the <code className="bg-red-900/30 px-1 rounded">.env</code> file:
+                  <br />
+                  <code className="bg-red-900/30 px-2 py-1 rounded mt-1 block">VITE_OPENAI_API_KEY=your_actual_api_key_here</code>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Chat Container */}
         <div className="bg-gray-900/50 backdrop-blur-sm border border-cyan-500/30 rounded-2xl shadow-2xl overflow-hidden">
           {/* Chat Header */}
@@ -112,8 +206,10 @@ const IdeaForgeAI: React.FC = () => {
               </div>
               <div className="ml-auto">
                 <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                  <span className="text-green-400 text-sm">Online</span>
+                  <div className={`w-2 h-2 rounded-full ${isApiKeyConfigured() ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></div>
+                  <span className={`text-sm ${isApiKeyConfigured() ? 'text-green-400' : 'text-red-400'}`}>
+                    {isApiKeyConfigured() ? 'Online' : 'Offline'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -254,18 +350,35 @@ const IdeaForgeAI: React.FC = () => {
           ))}
         </div>
 
-        {/* API Key Notice */}
-        <div className="mt-8 p-6 bg-gradient-to-r from-amber-900/20 to-orange-900/20 border border-amber-500/30 rounded-xl">
+        {/* Integration Status */}
+        <div className={`mt-8 p-6 rounded-xl border ${
+          isApiKeyConfigured() 
+            ? 'bg-gradient-to-r from-green-900/20 to-emerald-900/20 border-green-500/30' 
+            : 'bg-gradient-to-r from-amber-900/20 to-orange-900/20 border-amber-500/30'
+        }`}>
           <div className="flex items-start space-x-3">
-            <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Zap className="text-amber-400" size={16} />
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+              isApiKeyConfigured() ? 'bg-green-500/20' : 'bg-amber-500/20'
+            }`}>
+              {isApiKeyConfigured() ? (
+                <Sparkles className="text-green-400" size={16} />
+              ) : (
+                <Zap className="text-amber-400" size={16} />
+              )}
             </div>
             <div>
-              <h3 className="text-amber-300 font-semibold mb-2">Ready for AI Integration</h3>
-              <p className="text-amber-100/80 text-sm">
-                This page is ready to connect with OpenAI's API. Once you provide your API key, 
-                IdeaForge++ will become a powerful AI assistant capable of generating personalized 
-                project ideas, solving technical problems, and providing innovative solutions.
+              <h3 className={`font-semibold mb-2 ${
+                isApiKeyConfigured() ? 'text-green-300' : 'text-amber-300'
+              }`}>
+                {isApiKeyConfigured() ? 'AI Integration Active' : 'Ready for AI Integration'}
+              </h3>
+              <p className={`text-sm ${
+                isApiKeyConfigured() ? 'text-green-100/80' : 'text-amber-100/80'
+              }`}>
+                {isApiKeyConfigured() 
+                  ? 'IdeaForge++ is now powered by OpenAI and ready to help you with intelligent project suggestions, technical solutions, and creative ideas!'
+                  : 'This page is ready to connect with OpenAI\'s API. Once you provide your API key, IdeaForge++ will become a powerful AI assistant capable of generating personalized project ideas, solving technical problems, and providing innovative solutions.'
+                }
               </p>
             </div>
           </div>
