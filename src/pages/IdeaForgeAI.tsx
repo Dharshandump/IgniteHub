@@ -65,6 +65,11 @@ const IdeaForgeAI: React.FC = () => {
   const [showProjectSteps, setShowProjectSteps] = useState(false);
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [rateLimitInfo, setRateLimitInfo] = useState<{
+    isRateLimited: boolean;
+    retryAfter: number;
+    countdown: number;
+  } | null>(null);
 
   const themes = [
     'AI & Machine Learning', 'EdTech', 'Gaming', 'Environment & Sustainability', 
@@ -547,14 +552,49 @@ Make it creative, practical, and aligned with current technology trends. Ensure 
     return apiKey && apiKey.trim() !== '' && !apiKey.includes('your_openai_api_key_here') ? apiKey : null;
   };
 
+  // Rate limit countdown effect
+  React.useEffect(() => {
+    let interval: NodeJS.Timeout;
+    
+    if (rateLimitInfo?.isRateLimited && rateLimitInfo.countdown > 0) {
+      interval = setInterval(() => {
+        setRateLimitInfo(prev => {
+          if (!prev || prev.countdown <= 1) {
+            return null; // Clear rate limit info when countdown reaches 0
+          }
+          return {
+            ...prev,
+            countdown: prev.countdown - 1
+          };
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [rateLimitInfo]);
+
+  const parseRetryAfter = (errorMessage: string): number => {
+    // Extract retry time from error message like "Please try again in 20s"
+    const match = errorMessage.match(/try again in (\d+)s/);
+    return match ? parseInt(match[1]) : 60; // Default to 60 seconds if not found
+  };
+
   const forgeIdea = async () => {
     if (!inputs.theme || !inputs.designStyle || !inputs.teamSize || !inputs.buildTime) {
       alert('Please fill in all required fields');
       return;
     }
 
+    // Check if we're currently rate limited
+    if (rateLimitInfo?.isRateLimited && rateLimitInfo.countdown > 0) {
+      return; // Don't make request if still rate limited
+    }
+
     setLoading(true);
     setApiError(null);
+    setRateLimitInfo(null);
     
     try {
       const apiKey = getOpenAIKey();
@@ -593,6 +633,18 @@ Make it creative, practical, and aligned with current technology trends. Ensure 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('OpenAI API Error:', errorData);
+        
+        // Handle rate limit specifically
+        if (response.status === 429 && errorData.error?.type === 'requests') {
+          const retryAfter = parseRetryAfter(errorData.error.message);
+          setRateLimitInfo({
+            isRateLimited: true,
+            retryAfter,
+            countdown: retryAfter
+          });
+          throw new Error(`Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`);
+        }
+        
         throw new Error(`OpenAI API Error (${response.status}): ${errorData.error?.message || 'Unknown error'}`);
       }
 
@@ -625,46 +677,49 @@ Make it creative, practical, and aligned with current technology trends. Ensure 
       console.error('Error generating idea:', error);
       setApiError(error.message);
       
-      // Enhanced fallback idea with all required fields
-      const fallbackIdea: ProjectIdea = {
-        title: "EcoTrack - Smart Carbon Footprint Tracker",
-        description: "A gamified web application that helps users track their daily carbon footprint through interactive challenges and provides personalized recommendations for sustainable living.",
-        detailedDescription: "EcoTrack is an innovative web application designed to make environmental consciousness engaging and actionable. Users can log their daily activities such as transportation, energy consumption, and food choices, while the app calculates their carbon footprint in real-time. The platform features a gamification system with badges, leaderboards, and challenges to motivate users towards more sustainable behaviors. Advanced AI algorithms provide personalized recommendations based on user patterns, local climate data, and available eco-friendly alternatives. The app also includes a social component where users can share achievements, participate in community challenges, and connect with like-minded individuals committed to reducing their environmental impact.",
-        difficulty: inputs.buildTime === '2 hours' || inputs.buildTime === '4 hours' ? 'Easy' : 
-                   inputs.buildTime === '8 hours' || inputs.buildTime === '12 hours' ? 'Medium' : 'Hard',
-        estimated_time: inputs.buildTime,
-        innovation_score: 78,
-        features: [
-          "Daily activity logging with smart categorization",
-          "Real-time carbon footprint calculation",
-          "Gamification with badges and achievements",
-          "AI-powered personalized recommendations",
-          "Social sharing and community challenges",
-          "Local environmental data integration",
-          "Progress tracking and analytics dashboard"
-        ],
-        suggested_stack: inputs.techStack.length > 0 ? inputs.techStack.slice(0, 4) : ["React", "Node.js", "MongoDB", "Chart.js"],
-        targetAudience: "Environmentally conscious individuals aged 18-35 who want to reduce their carbon footprint but need guidance and motivation to maintain sustainable habits",
-        marketPotential: "Growing environmental awareness and corporate sustainability initiatives create a strong market opportunity. Potential for B2B partnerships with companies tracking employee sustainability metrics.",
-        keyBenefits: [
-          "Increased environmental awareness and action",
-          "Gamified approach makes sustainability engaging",
-          "Data-driven insights for better decision making",
-          "Community support and motivation"
-        ],
-        implementationSteps: [
-          "Set up project structure and basic UI components",
-          "Implement user authentication and profile management",
-          "Create activity logging system with carbon calculation",
-          "Build gamification features and achievement system",
-          "Integrate social features and community challenges",
-          "Add AI recommendations and analytics dashboard",
-          "Test, optimize, and deploy the application"
-        ]
-      };
-      
-      setGeneratedIdea(fallbackIdea);
-      setHistory(prev => [fallbackIdea, ...prev.slice(0, 4)]);
+      // Only show fallback if it's not a rate limit error
+      if (!error.message.includes('Rate limit exceeded')) {
+        // Enhanced fallback idea with all required fields
+        const fallbackIdea: ProjectIdea = {
+          title: "EcoTrack - Smart Carbon Footprint Tracker",
+          description: "A gamified web application that helps users track their daily carbon footprint through interactive challenges and provides personalized recommendations for sustainable living.",
+          detailedDescription: "EcoTrack is an innovative web application designed to make environmental consciousness engaging and actionable. Users can log their daily activities such as transportation, energy consumption, and food choices, while the app calculates their carbon footprint in real-time. The platform features a gamification system with badges, leaderboards, and challenges to motivate users towards more sustainable behaviors. Advanced AI algorithms provide personalized recommendations based on user patterns, local climate data, and available eco-friendly alternatives. The app also includes a social component where users can share achievements, participate in community challenges, and connect with like-minded individuals committed to reducing their environmental impact.",
+          difficulty: inputs.buildTime === '2 hours' || inputs.buildTime === '4 hours' ? 'Easy' : 
+                     inputs.buildTime === '8 hours' || inputs.buildTime === '12 hours' ? 'Medium' : 'Hard',
+          estimated_time: inputs.buildTime,
+          innovation_score: 78,
+          features: [
+            "Daily activity logging with smart categorization",
+            "Real-time carbon footprint calculation",
+            "Gamification with badges and achievements",
+            "AI-powered personalized recommendations",
+            "Social sharing and community challenges",
+            "Local environmental data integration",
+            "Progress tracking and analytics dashboard"
+          ],
+          suggested_stack: inputs.techStack.length > 0 ? inputs.techStack.slice(0, 4) : ["React", "Node.js", "MongoDB", "Chart.js"],
+          targetAudience: "Environmentally conscious individuals aged 18-35 who want to reduce their carbon footprint but need guidance and motivation to maintain sustainable habits",
+          marketPotential: "Growing environmental awareness and corporate sustainability initiatives create a strong market opportunity. Potential for B2B partnerships with companies tracking employee sustainability metrics.",
+          keyBenefits: [
+            "Increased environmental awareness and action",
+            "Gamified approach makes sustainability engaging",
+            "Data-driven insights for better decision making",
+            "Community support and motivation"
+          ],
+          implementationSteps: [
+            "Set up project structure and basic UI components",
+            "Implement user authentication and profile management",
+            "Create activity logging system with carbon calculation",
+            "Build gamification features and achievement system",
+            "Integrate social features and community challenges",
+            "Add AI recommendations and analytics dashboard",
+            "Test, optimize, and deploy the application"
+          ]
+        };
+        
+        setGeneratedIdea(fallbackIdea);
+        setHistory(prev => [fallbackIdea, ...prev.slice(0, 4)]);
+      }
     } finally {
       setLoading(false);
     }
@@ -692,6 +747,15 @@ Make it creative, practical, and aligned with current technology trends. Ensure 
 
   const isApiKeyConfigured = () => {
     return getOpenAIKey() !== null;
+  };
+
+  const formatTime = (seconds: number): string => {
+    if (seconds < 60) {
+      return `${seconds}s`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
   };
 
   return (
@@ -732,8 +796,31 @@ Make it creative, practical, and aligned with current technology trends. Ensure 
           </div>
         )}
 
+        {/* Rate Limit Warning */}
+        {rateLimitInfo?.isRateLimited && (
+          <div className="mb-8 p-6 bg-gradient-to-r from-orange-900/20 to-red-900/20 border border-orange-500/30 rounded-xl">
+            <div className="flex items-start space-x-3">
+              <Clock className="text-orange-400 mt-1 flex-shrink-0 animate-pulse" size={24} />
+              <div>
+                <h3 className="text-orange-300 font-semibold mb-2">Rate Limit Reached</h3>
+                <p className="text-orange-100/80 mb-3">
+                  You've reached the OpenAI API rate limit. Please wait before generating another idea.
+                </p>
+                <div className="bg-orange-900/30 rounded-lg p-3 border border-orange-500/20">
+                  <p className="text-orange-200 text-sm">
+                    ⏱️ Try again in: <span className="font-mono font-bold">{formatTime(rateLimitInfo.countdown)}</span>
+                  </p>
+                  <p className="text-orange-200/70 text-xs mt-1">
+                    Tip: Upgrade your OpenAI plan at platform.openai.com/account/billing for higher rate limits
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* API Error Display */}
-        {apiError && (
+        {apiError && !rateLimitInfo?.isRateLimited && (
           <div className="mb-8 p-6 bg-gradient-to-r from-red-900/20 to-red-800/20 border border-red-500/30 rounded-xl">
             <div className="flex items-start space-x-3">
               <AlertCircle className="text-red-400 mt-1 flex-shrink-0" size={24} />
@@ -877,13 +964,18 @@ Make it creative, practical, and aligned with current technology trends. Ensure 
               {/* Forge Button */}
               <Button
                 onClick={forgeIdea}
-                disabled={loading || !inputs.theme || !inputs.designStyle || !inputs.teamSize || !inputs.buildTime}
-                className="w-full bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white py-3 text-lg font-semibold"
+                disabled={loading || !inputs.theme || !inputs.designStyle || !inputs.teamSize || !inputs.buildTime || (rateLimitInfo?.isRateLimited && rateLimitInfo.countdown > 0)}
+                className="w-full bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white py-3 text-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <>
                     <Loader2 className="animate-spin mr-2" size={20} />
                     {isApiKeyConfigured() ? 'Forging Your Idea...' : 'Generating Fallback Idea...'}
+                  </>
+                ) : rateLimitInfo?.isRateLimited && rateLimitInfo.countdown > 0 ? (
+                  <>
+                    <Clock className="mr-2" size={20} />
+                    Wait {formatTime(rateLimitInfo.countdown)}
                   </>
                 ) : (
                   <>
@@ -910,10 +1002,13 @@ Make it creative, practical, and aligned with current technology trends. Ensure 
                     onClick={forgeIdea}
                     variant="outline"
                     size="sm"
-                    className="border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/20"
+                    disabled={rateLimitInfo?.isRateLimited && rateLimitInfo.countdown > 0}
+                    className="border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-50"
                   >
                     <RotateCcw size={16} className="mr-1" />
-                    Regenerate
+                    {rateLimitInfo?.isRateLimited && rateLimitInfo.countdown > 0 ? 
+                      `Wait ${formatTime(rateLimitInfo.countdown)}` : 'Regenerate'
+                    }
                   </Button>
                 </div>
 
@@ -1227,10 +1322,13 @@ Make it creative, practical, and aligned with current technology trends. Ensure 
                   </Button>
                   <Button 
                     onClick={forgeIdea}
-                    className="bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700"
+                    disabled={rateLimitInfo?.isRateLimited && rateLimitInfo.countdown > 0}
+                    className="bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 disabled:opacity-50"
                   >
                     <Zap className="mr-2" size={16} />
-                    Generate New Idea
+                    {rateLimitInfo?.isRateLimited && rateLimitInfo.countdown > 0 ? 
+                      `Wait ${formatTime(rateLimitInfo.countdown)}` : 'Generate New Idea'
+                    }
                   </Button>
                 </div>
               </div>
