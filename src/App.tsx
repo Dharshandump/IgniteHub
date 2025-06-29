@@ -14,6 +14,7 @@ import ContactPage from "@/pages/Contact";
 import NotFoundPage from "@/pages/NotFound";
 import ResourceDetail from "@/pages/ResourceDetail";
 import IdeaForgeAI from "@/pages/IdeaForgeAI";
+import ScrollToTop from "@/components/ui/ScrollToTop";
 
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 
@@ -34,6 +35,7 @@ const App: React.FC = () => {
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            <ScrollToTop />
             <Routes>
               <Route path="/" element={<Layout />}>
                 <Route index element={<HomePage />} />

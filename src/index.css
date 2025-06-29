@@ -33,6 +33,23 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Ensure consistent scroll behavior */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Reset scroll position for route changes */
+  html, body {
+    overflow-x: hidden;
+  }
+
+  /* Ensure main content starts at top */
+  #root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 @layer utilities {
@@ -91,5 +108,21 @@
   .focus-visible {
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
+  }
+
+  /* Ensure smooth page transitions */
+  .page-transition {
+    animation: pageEnter 0.3s ease-out;
+  }
+
+  @keyframes pageEnter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 }
