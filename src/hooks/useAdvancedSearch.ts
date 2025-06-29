@@ -62,46 +62,6 @@ export const useAdvancedSearch = (resources: Resource[]) => {
         if (!hasMatchingTag) return false;
       }
 
-      // Date range filter
-      if (filters.dateRange.start && resource.dateAdded) {
-        if (new Date(resource.dateAdded) < new Date(filters.dateRange.start)) {
-          return false;
-        }
-      }
-      if (filters.dateRange.end && resource.dateAdded) {
-        if (new Date(resource.dateAdded) > new Date(filters.dateRange.end)) {
-          return false;
-        }
-      }
-
-      // Location filter
-      if (filters.location && resource.location) {
-        if (!resource.location.toLowerCase().includes(filters.location.toLowerCase())) {
-          return false;
-        }
-      }
-
-      // Rating filter
-      if (filters.minRating > 0 && resource.rating) {
-        if (resource.rating < filters.minRating) {
-          return false;
-        }
-      }
-
-      // Difficulty filter
-      if (filters.difficulty !== 'all' && resource.difficulty) {
-        if (resource.difficulty !== filters.difficulty) {
-          return false;
-        }
-      }
-
-      // Type filter
-      if (filters.type !== 'all' && resource.type) {
-        if (resource.type !== filters.type) {
-          return false;
-        }
-      }
-
       // Free/Paid filter
       if (filters.isFree !== 'all') {
         const isFree = filters.isFree === 'free';
