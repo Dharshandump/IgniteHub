@@ -13,6 +13,7 @@ import AboutPage from "@/pages/About";
 import ContactPage from "@/pages/Contact";
 import NotFoundPage from "@/pages/NotFound";
 import ResourceDetail from "@/pages/ResourceDetail";
+import IdeaForgeAI from "@/pages/IdeaForgeAI";
 
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 
@@ -42,6 +43,7 @@ const App: React.FC = () => {
                 <Route path="favorites" element={<FavoritesPage />} />
                 <Route path="about" element={<AboutPage />} />
                 <Route path="contact" element={<ContactPage />} />
+                <Route path="ideaforge" element={<IdeaForgeAI />} />
               </Route>
               <Route path="*" element={<NotFoundPage />} />
             </Routes>

@@ -11,6 +11,7 @@ interface MobileMenuProps {
 const navigationItems = [
   { name: 'Home', path: '/' },
   { name: 'Resources', path: '/resources' },
+  { name: 'IdeaForge++', path: '/ideaforge' },
   { name: 'About', path: '/about' },
   { name: 'Contact', path: '/contact' },
 ];
