@@ -4,13 +4,13 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 // Check if environment variables are properly set
-if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('placeholder') || supabaseAnonKey.includes('placeholder')) {
+if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('your_supabase_project_url_here') || supabaseAnonKey.includes('your_supabase_anon_key_here')) {
   console.warn('Supabase environment variables not properly configured. Contact form will use fallback email service.');
 }
 
 export const supabase = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder_anon_key',
+  supabaseUrl && !supabaseUrl.includes('your_supabase_project_url_here') ? supabaseUrl : 'https://placeholder.supabase.co',
+  supabaseAnonKey && !supabaseAnonKey.includes('your_supabase_anon_key_here') ? supabaseAnonKey : 'placeholder_anon_key',
   {
     auth: {
       autoRefreshToken: true,
@@ -37,8 +37,8 @@ export const supabase = createClient(
 export const isSupabaseConfigured = () => {
   const isConfigured = supabaseUrl && 
          supabaseAnonKey && 
-         !supabaseUrl.includes('placeholder') && 
-         !supabaseAnonKey.includes('placeholder') &&
+         !supabaseUrl.includes('your_supabase_project_url_here') && 
+         !supabaseAnonKey.includes('your_supabase_anon_key_here') &&
          supabaseUrl.startsWith('https://') &&
          supabaseUrl.includes('.supabase.co');
   
