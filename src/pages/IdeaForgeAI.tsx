@@ -576,9 +576,43 @@ Make it creative, practical, and aligned with current technology trends. Ensure 
   }, [rateLimitInfo]);
 
   const parseRetryAfter = (errorMessage: string): number => {
-    // Extract retry time from error message like "Please try again in 20s"
-    const match = errorMessage.match(/try again in (\d+)s/);
-    return match ? parseInt(match[1]) : 60; // Default to 60 seconds if not found
+    // Try multiple patterns to extract retry time
+    const patterns = [
+      /try again in (\d+)s/i,
+      /please try again in (\d+) seconds/i,
+      /retry after (\d+) seconds/i,
+      /wait (\d+) seconds/i
+    ];
+    
+    for (const pattern of patterns) {
+      const match = errorMessage.match(pattern);
+      if (match) {
+        return parseInt(match[1]);
+      }
+    }
+    
+    // Default to 30 seconds if no specific time found
+    return 30;
+  };
+
+  const isRateLimitError = (error: any): boolean => {
+    // Check various indicators of rate limiting
+    if (error?.error?.type === 'requests' || error?.error?.code === 'rate_limit_exceeded') {
+      return true;
+    }
+    
+    const errorMessage = error?.error?.message || error?.message || '';
+    const rateLimitIndicators = [
+      'rate limit',
+      'too many requests',
+      'quota exceeded',
+      'requests per min',
+      'rpm'
+    ];
+    
+    return rateLimitIndicators.some(indicator => 
+      errorMessage.toLowerCase().includes(indicator)
+    );
   };
 
   const forgeIdea = async () => {
@@ -634,95 +668,110 @@ Make it creative, practical, and aligned with current technology trends. Ensure 
         const errorData = await response.json().catch(() => ({}));
         console.error('OpenAI API Error:', errorData);
         
-        // Handle rate limit specifically
-        if (response.status === 429 && errorData.error?.type === 'requests') {
-          const retryAfter = parseRetryAfter(errorData.error.message);
+        // Check if this is a rate limit error
+        if (response.status === 429 || isRateLimitError(errorData)) {
+          const retryAfter = parseRetryAfter(errorData.error?.message || '');
           setRateLimitInfo({
             isRateLimited: true,
             retryAfter,
             countdown: retryAfter
           });
-          throw new Error(`Rate limit exceeded. Please wait ${retryAfter} seconds before trying again.`);
+          
+          // Don't throw error for rate limits, just set the rate limit state
+          // The fallback idea will be shown automatically
+          console.log(`Rate limit detected. Retry after ${retryAfter} seconds.`);
+        } else {
+          // For non-rate-limit errors, throw the error
+          throw new Error(`OpenAI API Error (${response.status}): ${errorData.error?.message || 'Unknown error'}`);
         }
+      } else {
+        // Successful response
+        const data = await response.json();
+        console.log('OpenAI API Response:', data);
         
-        throw new Error(`OpenAI API Error (${response.status}): ${errorData.error?.message || 'Unknown error'}`);
-      }
+        const content = data.choices?.[0]?.message?.content;
+        
+        if (!content) {
+          throw new Error('No response content from OpenAI API');
+        }
 
-      const data = await response.json();
-      console.log('OpenAI API Response:', data);
-      
-      const content = data.choices?.[0]?.message?.content;
-      
-      if (!content) {
-        throw new Error('No response content from OpenAI API');
-      }
-
-      // Clean the content to ensure it's valid JSON
-      const cleanContent = content.trim().replace(/```json\n?|\n?```/g, '');
-      
-      try {
-        const idea: ProjectIdea = JSON.parse(cleanContent);
-        console.log('Generated Idea:', idea);
+        // Clean the content to ensure it's valid JSON
+        const cleanContent = content.trim().replace(/```json\n?|\n?```/g, '');
         
-        setGeneratedIdea(idea);
-        setHistory(prev => [idea, ...prev.slice(0, 4)]); // Keep last 5 ideas
-        
-      } catch (parseError) {
-        console.error('JSON Parse Error:', parseError);
-        console.error('Content that failed to parse:', cleanContent);
-        throw new Error('Failed to parse AI response. Please try again.');
+        try {
+          const idea: ProjectIdea = JSON.parse(cleanContent);
+          console.log('Generated Idea:', idea);
+          
+          setGeneratedIdea(idea);
+          setHistory(prev => [idea, ...prev.slice(0, 4)]); // Keep last 5 ideas
+          
+          // Clear any previous errors on success
+          setApiError(null);
+          return; // Exit early on success
+          
+        } catch (parseError) {
+          console.error('JSON Parse Error:', parseError);
+          console.error('Content that failed to parse:', cleanContent);
+          throw new Error('Failed to parse AI response. Please try again.');
+        }
       }
       
     } catch (error: any) {
       console.error('Error generating idea:', error);
-      setApiError(error.message);
       
-      // Only show fallback if it's not a rate limit error
-      if (!error.message.includes('Rate limit exceeded')) {
-        // Enhanced fallback idea with all required fields
-        const fallbackIdea: ProjectIdea = {
-          title: "EcoTrack - Smart Carbon Footprint Tracker",
-          description: "A gamified web application that helps users track their daily carbon footprint through interactive challenges and provides personalized recommendations for sustainable living.",
-          detailedDescription: "EcoTrack is an innovative web application designed to make environmental consciousness engaging and actionable. Users can log their daily activities such as transportation, energy consumption, and food choices, while the app calculates their carbon footprint in real-time. The platform features a gamification system with badges, leaderboards, and challenges to motivate users towards more sustainable behaviors. Advanced AI algorithms provide personalized recommendations based on user patterns, local climate data, and available eco-friendly alternatives. The app also includes a social component where users can share achievements, participate in community challenges, and connect with like-minded individuals committed to reducing their environmental impact.",
-          difficulty: inputs.buildTime === '2 hours' || inputs.buildTime === '4 hours' ? 'Easy' : 
-                     inputs.buildTime === '8 hours' || inputs.buildTime === '12 hours' ? 'Medium' : 'Hard',
-          estimated_time: inputs.buildTime,
-          innovation_score: 78,
-          features: [
-            "Daily activity logging with smart categorization",
-            "Real-time carbon footprint calculation",
-            "Gamification with badges and achievements",
-            "AI-powered personalized recommendations",
-            "Social sharing and community challenges",
-            "Local environmental data integration",
-            "Progress tracking and analytics dashboard"
-          ],
-          suggested_stack: inputs.techStack.length > 0 ? inputs.techStack.slice(0, 4) : ["React", "Node.js", "MongoDB", "Chart.js"],
-          targetAudience: "Environmentally conscious individuals aged 18-35 who want to reduce their carbon footprint but need guidance and motivation to maintain sustainable habits",
-          marketPotential: "Growing environmental awareness and corporate sustainability initiatives create a strong market opportunity. Potential for B2B partnerships with companies tracking employee sustainability metrics.",
-          keyBenefits: [
-            "Increased environmental awareness and action",
-            "Gamified approach makes sustainability engaging",
-            "Data-driven insights for better decision making",
-            "Community support and motivation"
-          ],
-          implementationSteps: [
-            "Set up project structure and basic UI components",
-            "Implement user authentication and profile management",
-            "Create activity logging system with carbon calculation",
-            "Build gamification features and achievement system",
-            "Integrate social features and community challenges",
-            "Add AI recommendations and analytics dashboard",
-            "Test, optimize, and deploy the application"
-          ]
-        };
-        
-        setGeneratedIdea(fallbackIdea);
-        setHistory(prev => [fallbackIdea, ...prev.slice(0, 4)]);
+      // Only set API error if it's not a rate limit issue
+      if (!rateLimitInfo?.isRateLimited) {
+        setApiError(error.message);
       }
-    } finally {
-      setLoading(false);
     }
+    
+    // Always show fallback idea if we reach this point (either due to error or rate limit)
+    if (!generatedIdea || rateLimitInfo?.isRateLimited) {
+      console.log('Showing fallback idea due to API issues or rate limiting');
+      
+      // Enhanced fallback idea with all required fields
+      const fallbackIdea: ProjectIdea = {
+        title: "EcoTrack - Smart Carbon Footprint Tracker",
+        description: "A gamified web application that helps users track their daily carbon footprint through interactive challenges and provides personalized recommendations for sustainable living.",
+        detailedDescription: "EcoTrack is an innovative web application designed to make environmental consciousness engaging and actionable. Users can log their daily activities such as transportation, energy consumption, and food choices, while the app calculates their carbon footprint in real-time. The platform features a gamification system with badges, leaderboards, and challenges to motivate users towards more sustainable behaviors. Advanced AI algorithms provide personalized recommendations based on user patterns, local climate data, and available eco-friendly alternatives. The app also includes a social component where users can share achievements, participate in community challenges, and connect with like-minded individuals committed to reducing their environmental impact.",
+        difficulty: inputs.buildTime === '2 hours' || inputs.buildTime === '4 hours' ? 'Easy' : 
+                   inputs.buildTime === '8 hours' || inputs.buildTime === '12 hours' ? 'Medium' : 'Hard',
+        estimated_time: inputs.buildTime,
+        innovation_score: 78,
+        features: [
+          "Daily activity logging with smart categorization",
+          "Real-time carbon footprint calculation",
+          "Gamification with badges and achievements",
+          "AI-powered personalized recommendations",
+          "Social sharing and community challenges",
+          "Local environmental data integration",
+          "Progress tracking and analytics dashboard"
+        ],
+        suggested_stack: inputs.techStack.length > 0 ? inputs.techStack.slice(0, 4) : ["React", "Node.js", "MongoDB", "Chart.js"],
+        targetAudience: "Environmentally conscious individuals aged 18-35 who want to reduce their carbon footprint but need guidance and motivation to maintain sustainable habits",
+        marketPotential: "Growing environmental awareness and corporate sustainability initiatives create a strong market opportunity. Potential for B2B partnerships with companies tracking employee sustainability metrics.",
+        keyBenefits: [
+          "Increased environmental awareness and action",
+          "Gamified approach makes sustainability engaging",
+          "Data-driven insights for better decision making",
+          "Community support and motivation"
+        ],
+        implementationSteps: [
+          "Set up project structure and basic UI components",
+          "Implement user authentication and profile management",
+          "Create activity logging system with carbon calculation",
+          "Build gamification features and achievement system",
+          "Integrate social features and community challenges",
+          "Add AI recommendations and analytics dashboard",
+          "Test, optimize, and deploy the application"
+        ]
+      };
+      
+      setGeneratedIdea(fallbackIdea);
+      setHistory(prev => [fallbackIdea, ...prev.slice(0, 4)]);
+    }
+    
+    setLoading(false);
   };
 
   const handleProceedWithProject = () => {
@@ -804,11 +853,11 @@ Make it creative, practical, and aligned with current technology trends. Ensure 
               <div>
                 <h3 className="text-orange-300 font-semibold mb-2">Rate Limit Reached</h3>
                 <p className="text-orange-100/80 mb-3">
-                  You've reached the OpenAI API rate limit. Please wait before generating another idea.
+                  You've reached the OpenAI API rate limit. A fallback idea has been generated for you.
                 </p>
                 <div className="bg-orange-900/30 rounded-lg p-3 border border-orange-500/20">
                   <p className="text-orange-200 text-sm">
-                    ⏱️ Try again in: <span className="font-mono font-bold">{formatTime(rateLimitInfo.countdown)}</span>
+                    ⏱️ Try AI generation again in: <span className="font-mono font-bold">{formatTime(rateLimitInfo.countdown)}</span>
                   </p>
                   <p className="text-orange-200/70 text-xs mt-1">
                     Tip: Upgrade your OpenAI plan at platform.openai.com/account/billing for higher rate limits
