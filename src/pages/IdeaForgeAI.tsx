@@ -12,11 +12,16 @@ import { Badge } from '../components/ui/badge';
 interface ProjectIdea {
   title: string;
   description: string;
+  detailedDescription: string;
   difficulty: 'Easy' | 'Medium' | 'Hard';
   estimated_time: string;
   innovation_score: number;
   features: string[];
   suggested_stack: string[];
+  targetAudience: string;
+  marketPotential: string;
+  keyBenefits: string[];
+  implementationSteps: string[];
 }
 
 interface ForgeInputs {
@@ -511,15 +516,20 @@ Special Requirements: ${inputs.specialRequests}
 Return ONLY a valid JSON response in this exact format:
 {
   "title": "Creative project name",
-  "description": "Detailed 2-3 sentence description of the project",
+  "description": "Brief 1-2 sentence overview",
+  "detailedDescription": "Comprehensive 4-5 sentence detailed description explaining the project's purpose, key functionality, target users, unique value proposition, and potential impact",
   "difficulty": "Easy|Medium|Hard",
   "estimated_time": "Realistic time estimate",
   "innovation_score": 85,
-  "features": ["Feature 1", "Feature 2", "Feature 3", "Feature 4"],
-  "suggested_stack": ["Tech1", "Tech2", "Tech3"]
+  "features": ["Feature 1", "Feature 2", "Feature 3", "Feature 4", "Feature 5"],
+  "suggested_stack": ["Tech1", "Tech2", "Tech3", "Tech4"],
+  "targetAudience": "Specific target audience description",
+  "marketPotential": "Brief market analysis and potential",
+  "keyBenefits": ["Benefit 1", "Benefit 2", "Benefit 3"],
+  "implementationSteps": ["Step 1", "Step 2", "Step 3", "Step 4"]
 }
 
-Make it creative, feasible, and aligned with the specified constraints.`;
+Make it creative, feasible, and aligned with the specified constraints. Ensure the detailed description is comprehensive and engaging.`;
   };
 
   const forgeIdea = async () => {
@@ -534,6 +544,7 @@ Make it creative, feasible, and aligned with the specified constraints.`;
       const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
       
       if (!apiKey || apiKey === 'your_openai_api_key_here') {
+        console.warn('OpenAI API key not configured, using fallback idea');
         throw new Error('OpenAI API key not configured');
       }
 
@@ -548,14 +559,14 @@ Make it creative, feasible, and aligned with the specified constraints.`;
           messages: [
             {
               role: "system",
-              content: "You are a creative project idea generator. Always respond with valid JSON only, no additional text or formatting."
+              content: "You are a creative project idea generator for young innovators. Always respond with valid JSON only, no additional text or formatting. Create detailed, innovative, and feasible project ideas."
             },
             {
               role: "user",
               content: buildPrompt()
             }
           ],
-          max_tokens: 800,
+          max_tokens: 1200,
           temperature: 0.8,
         }),
       });
@@ -579,21 +590,39 @@ Make it creative, feasible, and aligned with the specified constraints.`;
     } catch (error: any) {
       console.error('Error generating idea:', error);
       
-      // Fallback idea for demo purposes
+      // Enhanced fallback idea with detailed description
       const fallbackIdea: ProjectIdea = {
         title: "EcoTrack - Personal Carbon Footprint Tracker",
-        description: "A gamified web application that helps users track their daily carbon footprint through interactive challenges and provides personalized recommendations for sustainable living.",
+        description: "A gamified web application that helps users track their daily carbon footprint through interactive challenges.",
+        detailedDescription: "EcoTrack is an innovative web application designed to make environmental consciousness engaging and actionable. The platform allows users to log their daily activities—from transportation choices to energy consumption—and automatically calculates their carbon footprint using real-time data. What sets EcoTrack apart is its gamification approach, featuring achievement badges, weekly challenges, and social leaderboards that motivate users to adopt more sustainable habits. The app provides personalized recommendations based on user behavior patterns, connects like-minded individuals through community features, and offers integration with smart home devices for automatic tracking. By combining environmental awareness with social engagement and competitive elements, EcoTrack transforms the often overwhelming concept of climate action into an accessible, fun, and rewarding daily practice.",
         difficulty: "Medium",
         estimated_time: inputs.buildTime,
         innovation_score: 78,
         features: [
-          "Daily activity logging",
-          "Carbon footprint calculator",
-          "Gamification with badges",
-          "Social sharing features",
-          "Sustainability tips"
+          "Daily activity logging with smart suggestions",
+          "Real-time carbon footprint calculation",
+          "Gamification with badges and achievements",
+          "Social challenges and community leaderboards",
+          "Personalized sustainability recommendations",
+          "Smart home device integration",
+          "Progress tracking and analytics dashboard"
         ],
-        suggested_stack: inputs.techStack.length > 0 ? inputs.techStack.slice(0, 4) : ["React", "Node.js", "MongoDB", "Chart.js"]
+        suggested_stack: inputs.techStack.length > 0 ? inputs.techStack.slice(0, 4) : ["React", "Node.js", "MongoDB", "Chart.js"],
+        targetAudience: "Environmentally conscious individuals aged 18-35 who want to reduce their carbon footprint but need motivation and guidance",
+        marketPotential: "Growing environmental awareness market with potential for partnerships with eco-friendly brands and government initiatives",
+        keyBenefits: [
+          "Makes environmental action accessible and engaging",
+          "Provides measurable impact tracking",
+          "Builds community around sustainability",
+          "Offers personalized guidance for improvement"
+        ],
+        implementationSteps: [
+          "Research carbon footprint calculation methods and APIs",
+          "Design user-friendly activity logging interface",
+          "Implement gamification system with rewards",
+          "Build social features and community platform",
+          "Integrate with external APIs for real-time data"
+        ]
       };
       
       setGeneratedIdea(fallbackIdea);
@@ -610,6 +639,17 @@ Make it creative, feasible, and aligned with the specified constraints.`;
       const stepsElement = document.getElementById('project-steps');
       if (stepsElement) {
         stepsElement.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 100);
+  };
+
+  const handleBackToBlueprint = () => {
+    setShowProjectSteps(false);
+    // Scroll back to the generated idea section
+    setTimeout(() => {
+      const blueprintElement = document.getElementById('mission-blueprint');
+      if (blueprintElement) {
+        blueprintElement.scrollIntoView({ behavior: 'smooth' });
       }
     }, 100);
   };
@@ -809,7 +849,7 @@ Make it creative, feasible, and aligned with the specified constraints.`;
           {/* Output Section */}
           <div className="space-y-6">
             {generatedIdea ? (
-              <div className="bg-gray-900/50 backdrop-blur-sm border border-cyan-500/30 rounded-2xl p-8 shadow-2xl">
+              <div id="mission-blueprint" className="bg-gray-900/50 backdrop-blur-sm border border-cyan-500/30 rounded-2xl p-8 shadow-2xl">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-gradient-to-r from-purple-400 to-pink-500 rounded-full flex items-center justify-center">
@@ -844,7 +884,12 @@ Make it creative, feasible, and aligned with the specified constraints.`;
                       <Sparkles className="text-blue-400" size={18} />
                       <span className="text-blue-300 font-medium">Mission Brief</span>
                     </div>
-                    <p className="text-gray-200 leading-relaxed">{generatedIdea.description}</p>
+                    <p className="text-gray-200 leading-relaxed mb-3">{generatedIdea.description}</p>
+                    {generatedIdea.detailedDescription && (
+                      <div className="pt-3 border-t border-blue-500/20">
+                        <p className="text-gray-300 leading-relaxed text-sm">{generatedIdea.detailedDescription}</p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Stats Grid */}
@@ -883,6 +928,31 @@ Make it creative, feasible, and aligned with the specified constraints.`;
                     </div>
                   </div>
 
+                  {/* Target Audience & Market Potential */}
+                  {(generatedIdea.targetAudience || generatedIdea.marketPotential) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {generatedIdea.targetAudience && (
+                        <div className="bg-gradient-to-r from-pink-900/30 to-rose-900/30 rounded-xl p-4 border border-pink-500/30">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <Users className="text-pink-400" size={18} />
+                            <span className="text-pink-300 font-medium">Target Audience</span>
+                          </div>
+                          <p className="text-gray-200 text-sm">{generatedIdea.targetAudience}</p>
+                        </div>
+                      )}
+                      
+                      {generatedIdea.marketPotential && (
+                        <div className="bg-gradient-to-r from-emerald-900/30 to-teal-900/30 rounded-xl p-4 border border-emerald-500/30">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <Target className="text-emerald-400" size={18} />
+                            <span className="text-emerald-300 font-medium">Market Potential</span>
+                          </div>
+                          <p className="text-gray-200 text-sm">{generatedIdea.marketPotential}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Features */}
                   <div className="bg-gradient-to-r from-indigo-900/30 to-purple-900/30 rounded-xl p-4 border border-indigo-500/30">
                     <div className="flex items-center space-x-2 mb-3">
@@ -898,6 +968,24 @@ Make it creative, feasible, and aligned with the specified constraints.`;
                       ))}
                     </div>
                   </div>
+
+                  {/* Key Benefits */}
+                  {generatedIdea.keyBenefits && generatedIdea.keyBenefits.length > 0 && (
+                    <div className="bg-gradient-to-r from-green-900/30 to-lime-900/30 rounded-xl p-4 border border-green-500/30">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <CheckCircle className="text-green-400" size={18} />
+                        <span className="text-green-300 font-medium">Key Benefits</span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2">
+                        {generatedIdea.keyBenefits.map((benefit, index) => (
+                          <div key={index} className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                            <span className="text-gray-200">{benefit}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Suggested Stack */}
                   <div className="bg-gradient-to-r from-teal-900/30 to-cyan-900/30 rounded-xl p-4 border border-teal-500/30">
@@ -1068,7 +1156,7 @@ Make it creative, feasible, and aligned with the specified constraints.`;
                 </p>
                 <div className="flex justify-center space-x-4">
                   <Button 
-                    onClick={() => setShowProjectSteps(false)}
+                    onClick={handleBackToBlueprint}
                     variant="outline"
                     className="border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/20"
                   >
