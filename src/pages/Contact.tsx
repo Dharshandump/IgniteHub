@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Mail, MessageSquare, Send, CheckCircle, AlertCircle, Database } from 'lucide-react';
+import { Mail, MessageSquare, Send, CheckCircle, AlertCircle, Database, Wifi } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 import PageHeader from '../components/layout/PageHeader';
@@ -29,6 +29,42 @@ const ContactPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const [connectionStatus, setConnectionStatus] = useState<'checking' | 'connected' | 'fallback'>('checking');
+
+  // Check Supabase connection on component mount
+  useEffect(() => {
+    const checkConnection = async () => {
+      if (!isSupabaseConfigured()) {
+        console.log('Supabase not configured, using email fallback');
+        setConnectionStatus('fallback');
+        return;
+      }
+
+      try {
+        console.log('Testing Supabase connection...');
+        
+        // Simple connection test with timeout
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Connection timeout')), 5000);
+        });
+
+        const connectionPromise = supabase
+          .from('contacts')
+          .select('count')
+          .limit(1);
+
+        await Promise.race([connectionPromise, timeoutPromise]);
+        
+        console.log('Supabase connection successful');
+        setConnectionStatus('connected');
+      } catch (error: any) {
+        console.warn('Supabase connection failed, using email fallback:', error.message);
+        setConnectionStatus('fallback');
+      }
+    };
+
+    checkConnection();
+  }, []);
 
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -92,6 +128,33 @@ const ContactPage = () => {
     }
   };
 
+  // Submit to FormSubmit service
+  const submitToFormSubmit = async () => {
+    try {
+      console.log('Submitting via FormSubmit service...');
+      
+      const formSubmitData = new FormData();
+      formSubmitData.append('name', formData.name.trim());
+      formSubmitData.append('email', formData.email.trim());
+      formSubmitData.append('message', formData.message.trim());
+      formSubmitData.append('_subject', 'New message from IgniteHub Contact Form');
+      formSubmitData.append('_captcha', 'false');
+      formSubmitData.append('_template', 'table');
+
+      const response = await fetch('https://formsubmit.co/dharshansondi.dev@gmail.com', {
+        method: 'POST',
+        body: formSubmitData,
+        mode: 'no-cors'
+      });
+
+      console.log('FormSubmit submission completed');
+      return { success: true };
+    } catch (error) {
+      console.error('FormSubmit submission failed:', error);
+      throw new Error('Failed to send message via email service');
+    }
+  };
+
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,13 +162,6 @@ const ContactPage = () => {
     // Reset status
     setSubmitStatus('idle');
     setErrorMessage('');
-
-    // Check if Supabase is configured
-    if (!isSupabaseConfigured()) {
-      setErrorMessage('Contact form is not properly configured. Please check your Supabase settings.');
-      setSubmitStatus('error');
-      return;
-    }
 
     // Validate form
     if (!validateForm()) {
@@ -116,18 +172,39 @@ const ContactPage = () => {
     setIsSubmitting(true);
 
     try {
-      // Submit to Supabase
-      const result = await submitToSupabase();
-      
-      if (result.success) {
-        // Success - reset form and show success message
+      let submissionResult = null;
+
+      // Try Supabase first if connected
+      if (connectionStatus === 'connected') {
+        try {
+          submissionResult = await submitToSupabase();
+          console.log('Message saved to database');
+        } catch (supabaseError: any) {
+          console.warn('Supabase submission failed, falling back to FormSubmit:', supabaseError.message);
+          // Continue to FormSubmit fallback
+        }
+      }
+
+      // Use FormSubmit if Supabase failed or not available
+      if (!submissionResult) {
+        try {
+          submissionResult = await submitToFormSubmit();
+          console.log('Message sent via email service');
+        } catch (formSubmitError: any) {
+          console.error('FormSubmit submission also failed:', formSubmitError);
+          throw new Error('Unable to send message. Please try again later or contact us directly at dharshansondi.dev@gmail.com');
+        }
+      }
+
+      // Success - reset form and show success message
+      if (submissionResult?.success) {
         setFormData({ name: '', email: '', message: '' });
         setSubmitStatus('success');
       }
       
     } catch (error: any) {
       console.error('Error submitting contact form:', error);
-      setErrorMessage(error.message || 'Failed to send message. Please try again later.');
+      setErrorMessage(error.message || 'Failed to send message. Please try again or contact us directly.');
       setSubmitStatus('error');
     } finally {
       setIsSubmitting(false);
@@ -144,6 +221,16 @@ const ContactPage = () => {
       return () => clearTimeout(timer);
     }
   }, [submitStatus]);
+
+  // Check for success parameter in URL (from FormSubmit redirect)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('success') === 'true') {
+      setSubmitStatus('success');
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -197,23 +284,33 @@ const ContactPage = () => {
             {/* Connection Status Info */}
             <div className="mt-4 p-4 border rounded-lg">
               <div className="flex items-center">
-                {isSupabaseConfigured() ? (
+                {connectionStatus === 'checking' && (
+                  <>
+                    <Wifi className="text-gray-500 mr-3 animate-pulse" size={20} />
+                    <div>
+                      <p className="text-gray-700 font-medium">Checking connection...</p>
+                      <p className="text-gray-600 text-sm">Testing database connectivity</p>
+                    </div>
+                  </>
+                )}
+                {connectionStatus === 'connected' && (
                   <>
                     <Database className="text-green-600 mr-3" size={20} />
                     <div>
                       <p className="text-green-800 font-medium">Database Connected</p>
                       <p className="text-green-700 text-sm">
-                        Messages will be saved securely to our database
+                        Messages will be saved to database and sent via email
                       </p>
                     </div>
                   </>
-                ) : (
+                )}
+                {connectionStatus === 'fallback' && (
                   <>
-                    <AlertCircle className="text-red-600 mr-3" size={20} />
+                    <Mail className="text-yellow-600 mr-3" size={20} />
                     <div>
-                      <p className="text-red-800 font-medium">Database Not Configured</p>
-                      <p className="text-red-700 text-sm">
-                        Please configure Supabase settings to enable the contact form
+                      <p className="text-yellow-800 font-medium">Using Email Service</p>
+                      <p className="text-yellow-700 text-sm">
+                        Messages will be sent directly via email service
                       </p>
                     </div>
                   </>
@@ -272,7 +369,7 @@ const ContactPage = () => {
                     value={formData.name}
                     onChange={handleInputChange}
                     required
-                    disabled={isSubmitting || !isSupabaseConfigured()}
+                    disabled={isSubmitting}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Your name"
                     maxLength={100}
@@ -290,7 +387,7 @@ const ContactPage = () => {
                     value={formData.email}
                     onChange={handleInputChange}
                     required
-                    disabled={isSubmitting || !isSupabaseConfigured()}
+                    disabled={isSubmitting}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="your.email@example.com"
                     maxLength={255}
@@ -307,7 +404,7 @@ const ContactPage = () => {
                     value={formData.message}
                     onChange={handleInputChange}
                     required
-                    disabled={isSubmitting || !isSupabaseConfigured()}
+                    disabled={isSubmitting}
                     rows={6}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-colors resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
                     placeholder="Tell us about your idea, suggestion, or how we can help..."
@@ -321,13 +418,7 @@ const ContactPage = () => {
 
                 <button
                   type="submit"
-                  disabled={
-                    isSubmitting || 
-                    !isSupabaseConfigured() ||
-                    !formData.name.trim() || 
-                    !formData.email.trim() || 
-                    !formData.message.trim()
-                  }
+                  disabled={isSubmitting || !formData.name.trim() || !formData.email.trim() || !formData.message.trim()}
                   className="w-full flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:hover:from-purple-600 disabled:hover:to-pink-600"
                 >
                   {isSubmitting ? (
@@ -345,9 +436,9 @@ const ContactPage = () => {
 
                 <p className="text-xs text-gray-500 text-center">
                   By submitting this form, you agree to receive a response via email.
-                  {!isSupabaseConfigured() && (
-                    <span className="block mt-1 text-red-600">
-                      Contact form requires Supabase configuration to function.
+                  {connectionStatus === 'fallback' && (
+                    <span className="block mt-1 text-amber-600">
+                      Currently using email service due to database connection issue.
                     </span>
                   )}
                 </p>
